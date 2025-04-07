@@ -1,6 +1,6 @@
 // 词法分析
 
-use std::fmt::Display;
+use std::fmt::{write, Display};
 
 use anyhow::{Context, Result};
 
@@ -19,6 +19,9 @@ pub enum Token {
     GreaterEqual, // >=
     Less,
     LessEqual,
+    And,
+    Or,
+    Not
 }
 
 impl Display for Token {
@@ -37,12 +40,12 @@ impl Display for Token {
             Token::GreaterEqual => write!(f, ">="),
             Token::Less => write!(f, "<"),
             Token::LessEqual => write!(f, "<="),
+            Token::And => write!(f, "&&"),
+            Token::Or => write!(f, "||"),
+            Token::Not => write!(f, "!"),
         }
     }
 }
-
-
-
 
 pub fn tokenize(input: &str) -> Result<Vec<Token>> {
     let mut tokens = Vec::new();
@@ -69,6 +72,21 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
             '/' => { tokens.push(Token::Slash); chars.next(); }
             '(' => { tokens.push(Token::LParen); chars.next(); }
             ')' => { tokens.push(Token::RParen); chars.next(); }
+            '&' | '|' => {
+                chars.next();
+                match (ch, chars.peek()) {
+                    ('&', Some('&')) => {
+                        chars.next();
+                        tokens.push(Token::And);
+                    }
+                    ('|', Some('|')) => {
+                        chars.next();
+                        tokens.push(Token::Or);
+                    }
+                    (_, Some(c)) => anyhow::bail!("错误的bool运算符 {ch}{c}"),
+                    _ => anyhow::bail!("错误的bool运算符 {ch}")
+                }
+            }
             '=' | '!' => {
                 chars.next();
                 match (ch, chars.peek()) {
@@ -84,7 +102,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
                         anyhow::bail!("单个 '=' 是无效的");
                     }
                     ('!', _) => {
-                        anyhow::bail!("错误的语法: '{}' 后应跟 '='，但实际是 {:?}", ch, chars.peek().unwrap_or(&'?'));
+                        tokens.push(Token::Not); // 只有是表示 非操作符号
                     }
                     _ => {
                         anyhow::bail!("我认为永远不会执行到这里，但是编译器觉得有问题")
@@ -196,5 +214,49 @@ mod tests {
         let input = "1 + $";
         let result = tokenize(input);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_less_character() {
+        let input = "1 < 2+1";
+        let tokens = tokenize(input);
+        assert!(tokens.is_ok());
+        let tokens = tokens.unwrap();
+        assert_eq!(tokens, vec![
+            Token::Number(1.0),
+            Token::Less,
+            Token::Number(2.0),
+            Token::Plus,
+            Token::Number(1.0),
+        ]);
+    }
+
+    #[test]
+    fn test_bool_not_character() {
+        let input = "1+2!3+1";
+        let tokens = tokenize(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Number(1.0),
+            Token::Plus,
+            Token::Number(2.0),
+            Token::Not,
+            Token::Number(3.0),
+            Token::Plus,
+            Token::Number(1.0)
+        ]);
+    }
+
+    #[test]
+    fn test_bool_and_or_character() {
+        let input = "&&!||!=!!=";
+        let tokens = tokenize(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::And,
+            Token::Not,
+            Token::Or,
+            Token::NotEqual,
+            Token::Not,
+            Token::NotEqual,
+        ]);
     }
 }

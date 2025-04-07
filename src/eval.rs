@@ -1,17 +1,84 @@
-use anyhow::Ok;
+use std::{fmt::Display, ops::{Add, BitAnd, BitOr, Div, Mul, Sub}};
 
 // 求值器
 use crate::ast::{BinaryOp, Expr};
 
-pub fn eval(expr: &Expr) -> anyhow::Result<f64> {
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum Value {
+    Number(f64),
+    Bool(bool),
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "{}", n),
+            Value::Bool(b) => write!(f, "{}", b),
+        }
+        
+    }
+}
+
+impl Add for Value {
+    type Output = Value;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Value::Number(a), Value::Number(b)) => Value::Number(a + b),
+            _ => panic!("非数字无法运算 + "),
+        }
+    }
+}
+
+impl Sub for Value {
+    type Output = Value;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Value::Number(a), Value::Number(b)) => Value::Number(a - b),
+            _ => panic!("非数字无法运算 - "),
+        }
+    }
+}
+
+impl Mul for Value {
+    type Output = Value;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Value::Number(a), Value::Number(b)) => Value::Number(a * b),
+            _ => panic!("非数字无法运算 * "),
+        }
+    }
+}
+
+impl Div for Value {
+    type Output = Value;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Value::Number(a), Value::Number(b)) => Value::Number(a / b),
+            _ => panic!("非数字无法运算 / "),
+        }
+    }
+}
+
+pub fn eval(expr: &Expr) -> anyhow::Result<Value> {
     match expr {
-        Expr::Number(n) => Ok(*n),
+        Expr::Number(n) => Ok(Value::Number(*n)),
         Expr::UnaryOp { op, expr } => match op {
             BinaryOp::Add | BinaryOp::Sub => {
                 let mut n = eval(expr)?;
-                if *op == BinaryOp::Sub {
-                    n = -n;
+                
+                match n {
+                    Value::Number(num) => {
+                        if *op == BinaryOp::Sub {
+                            n = Value::Number(-num);
+                        }
+                    }
+                    _ => anyhow::bail!("错误 bool 值无法数学运算"),
                 }
+                
                 Ok(n)
             },
             _ => anyhow::bail!("不支持的单目运算符"),
@@ -25,17 +92,19 @@ pub fn eval(expr: &Expr) -> anyhow::Result<f64> {
                 BinaryOp::Sub => Ok(l - r),
                 BinaryOp::Mul => Ok(l * r),
                 BinaryOp::Div => {
-                    if r == 0.0 {
+                    if r == Value::Number(0.0) {
                         anyhow::bail!("除以零错误");
                     }
                     Ok(l / r)
                 },
-                BinaryOp::Eq  => Ok(if l == r { 1.0 } else { 0.0 }),
-                BinaryOp::Neq => Ok(if l != r { 1.0 } else { 0.0 }),
-                BinaryOp::Gt  => Ok(if l >  r { 1.0 } else { 0.0 }),
-                BinaryOp::Gte => Ok(if l >= r { 1.0 } else { 0.0 }),
-                BinaryOp::Lt  => Ok(if l <  r { 1.0 } else { 0.0 }),
-                BinaryOp::Lte => Ok(if l <= r { 1.0 } else { 0.0 }),
+                BinaryOp::Eq  => Ok(if l == r { Value::Bool(true) } else { Value::Bool(false)}),
+                BinaryOp::Neq => Ok(if l != r { Value::Bool(true) } else { Value::Bool(false)}),
+                BinaryOp::Gt  => Ok(if l >  r { Value::Bool(true) } else { Value::Bool(false)}),
+                BinaryOp::Gte => Ok(if l >= r { Value::Bool(true) } else { Value::Bool(false)}),
+                BinaryOp::Lt  => Ok(if l <  r { Value::Bool(true) } else { Value::Bool(false)}),
+                BinaryOp::Lte => Ok(if l <= r { Value::Bool(true) } else { Value::Bool(false)}),
+                BinaryOp::And => Ok(if l && r {Value::Bool(true)} else {Value::Bool(false)}),
+                BinaryOp::Or => Ok(if l || r {Value::Bool(true)} else {Value::Bool(false)}),
                 _ => anyhow::bail!("不支持的双目运算符"),
             }
         }
@@ -58,7 +127,7 @@ mod tests {
     fn test_number() {
         let expr = number_expr(42.0);
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 42.0);
+        assert_eq!(result, Value::Number(42.0));
     }
 
     // Test for Unary Operations (e.g., -x)
@@ -69,7 +138,7 @@ mod tests {
             expr: Box::new(number_expr(5.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, -5.0);
+        assert_eq!(result, Value::Number(-5.0));
     }
 
     // Test for Binary Operations (e.g., 2 + 3)
@@ -81,7 +150,7 @@ mod tests {
             right: Box::new(number_expr(3.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 5.0);
+        assert_eq!(result, Value::Number(5.0));
     }
 
     #[test]
@@ -92,7 +161,7 @@ mod tests {
             right: Box::new(number_expr(3.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 2.0);
+        assert_eq!(result, Value::Number(2.0));
     }
 
     #[test]
@@ -103,7 +172,7 @@ mod tests {
             right: Box::new(number_expr(2.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 8.0);
+        assert_eq!(result, Value::Number(8.0));
     }
 
     #[test]
@@ -114,7 +183,7 @@ mod tests {
             right: Box::new(number_expr(2.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 5.0);
+        assert_eq!(result, Value::Number(5.0));
     }
 
     #[test]
@@ -125,7 +194,7 @@ mod tests {
             right: Box::new(number_expr(3.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 1.0); // True is represented by 1.0
+        assert_eq!(result, Value::Bool(true)); // True is represented by 1.0
     }
 
     #[test]
@@ -136,7 +205,7 @@ mod tests {
             right: Box::new(number_expr(4.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 1.0); // True is represented by 1.0
+        assert_eq!(result, Value::Bool(true));
     }
 
     #[test]
@@ -147,7 +216,7 @@ mod tests {
             right: Box::new(number_expr(3.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 1.0); // True is represented by 1.0
+        assert_eq!(result, Value::Bool(true)); // True is represented by 1.0
     }
 
     #[test]
@@ -158,7 +227,7 @@ mod tests {
             right: Box::new(number_expr(5.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 1.0); // True is represented by 1.0
+        assert_eq!(result, Value::Bool(true)); // True is represented by 1.0
     }
 
     #[test]
@@ -169,7 +238,7 @@ mod tests {
             right: Box::new(number_expr(3.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 1.0); // True is represented by 1.0
+        assert_eq!(result, Value::Bool(true)); // True is represented by 1.0
     }
 
     #[test]
@@ -180,7 +249,7 @@ mod tests {
             right: Box::new(number_expr(2.0)),
         };
         let result = eval(&expr).unwrap();
-        assert_eq!(result, 1.0); // True is represented by 1.0
+        assert_eq!(result, Value::Bool(true)); // True is represented by 1.0
     }
 
     // Test division by zero, should return an error

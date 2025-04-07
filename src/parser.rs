@@ -34,12 +34,51 @@ impl Parser {
 
     pub fn parse_expr(&mut self) -> anyhow::Result<Expr> {
         self.log_enter("parse_expr");
-        let res = self.parse_cmd();
+        let res = self.parse_or();
         self.log_exit("parse_expr");
         res
     }
+
+    fn parse_or(&mut self) -> anyhow::Result<Expr> {
+        self.log_enter("parse_or");
+
+        let mut node = self.parse_and()?;
+        while let Some(token) = self.current()  {
+            match token {
+                Token::Not => {
+                    let op = BinaryOp::try_from(token)?; // 把 Token 转成 BinaryOp
+                    self.eat();
+                    let right = self.parse_and()?;
+                    node = Expr::BinaryOp { left: Box::new(node), op, right: Box::new(right) };
+                },
+                _ => break,
+            }   
+        }
+        self.log_exit("parse_or");
+
+        Ok(node)
+    }
+
+    fn parse_and(&mut self) -> anyhow::Result<Expr> {
+        self.log_enter("parse_and");
+        let mut node = self.parse_cmd()?;
+
+        while let Some(token) = self.current()  {
+            match token {
+                Token::And => {
+                    let op = BinaryOp::try_from(token)?; // 把 Token 转成 BinaryOp
+                    self.eat();
+                    let right = self.parse_cmd()?;
+                    node = Expr::BinaryOp { left: Box::new(node), op, right: Box::new(right) };
+                },
+                _ => break,
+            }   
+        }
+        self.log_exit("parse_and");
+        Ok(node)
+    }
     
-    fn parse_cmd (&mut self) -> anyhow::Result<Expr> {
+    fn parse_cmd(&mut self) -> anyhow::Result<Expr> {
         self.log_enter("parse_cmd");
         let mut node = self.parse_term()?;
         while let Some(token) = self.current() {
@@ -48,7 +87,6 @@ impl Parser {
                     let op = BinaryOp::try_from(token)?; // 把 Token 转成 BinaryOp
                     self.eat();
                     let right = self.parse_term()?;
-                    
                     node = Expr::BinaryOp { left: Box::new(node), op, right: Box::new(right) };
                 }
                 _ => break,
@@ -83,7 +121,7 @@ impl Parser {
         self.log_enter("parse_factor");
         let mut node = self.parse_unary()?;
         while let Some(token) = self.current() {
-            println!("{:depth$}token: {token}", "", depth = self.depth * 2);
+            // println!("{:depth$}token: {token}", "", depth = self.depth * 2);
             match token {
                 Token::Star | Token::Slash => {
                     let op = if let Token::Star = token { BinaryOp::Mul } else { BinaryOp::Div };
@@ -123,7 +161,7 @@ impl Parser {
         let depth = self.depth;
         let res = match self.eat() {
             Some(Token::Number(n)) => {
-                println!("{:indent$}=> Number({})", "", n, indent = depth * 2);
+                // println!("{:indent$}=> Number({})", "", n, indent = depth * 2);
                 Ok(Expr::Number(*n))
             }
             Some(Token::LParen) => {
@@ -152,6 +190,20 @@ mod tests {
         let tokens = vec![
             Token::Number(1f64),
             Token::Plus,
+            Token::Number(2f64),
+            Token::Star,
+            Token::Number(3f64)
+        ];
+        let mut parser = Parser::new(tokens);
+        assert!(parser.parse_expr().is_ok());
+    }
+
+    #[test]
+    fn parser_and()
+    {
+        let tokens = vec![
+            Token::Number(1f64),
+            Token::And,
             Token::Number(2f64),
             Token::Star,
             Token::Number(3f64)

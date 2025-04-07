@@ -2,6 +2,7 @@
 use std::fmt;
 
 use std::convert::TryFrom;
+
 use crate::lexer::Token;
 
 #[derive(Debug, Clone)]
@@ -33,6 +34,9 @@ pub enum BinaryOp {
     Gte,   // >=
     Lt,    // <
     Lte,   // <=
+    And,   // &&
+    Or,    // ||
+    Not,   // !
 }
 
 impl fmt::Display for BinaryOp {
@@ -48,6 +52,9 @@ impl fmt::Display for BinaryOp {
             BinaryOp::Gte => ">=",
             BinaryOp::Lt  => "<",
             BinaryOp::Lte => "<=",
+            BinaryOp::And => "&&",
+            BinaryOp::Or  => "||",
+            BinaryOp::Not => "!",
         };
         write!(f, "{}", symbol)
     }
@@ -69,6 +76,10 @@ impl TryFrom<&Token> for BinaryOp {
             Token::GreaterEqual => Ok(BinaryOp::Gte),
             Token::Less => Ok(BinaryOp::Lt),
             Token::LessEqual => Ok(BinaryOp::Lte),
+            Token::And => Ok(BinaryOp::And),
+            Token::Or => Ok(BinaryOp::Or),
+            Token::Not => Ok(BinaryOp::Not),
+            // Token::Number(n) => anyhow::bail!("错误的符号: {n}"),
             _ => Err(anyhow::bail!("未匹配的token")),
         }
     }
