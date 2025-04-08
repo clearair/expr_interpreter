@@ -1,6 +1,6 @@
 // 词法分析
 
-use std::fmt::{write, Display};
+use std::fmt::Display;
 
 use anyhow::{Context, Result};
 

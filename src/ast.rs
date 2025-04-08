@@ -8,6 +8,7 @@ use crate::lexer::Token;
 #[derive(Debug, Clone)]
 pub enum Expr {
     Number(f64),
+    // Bool(bool),
     UnaryOp { op: BinaryOp, expr: Box<Expr> },
     BinaryOp { left: Box<Expr>, op: BinaryOp, right: Box<Expr> }
 }
@@ -16,6 +17,7 @@ impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expr::Number(n) => write!(f, "{}", n),
+            // Expr::Bool(b)=> write!(f, "{b}"),
             Expr::UnaryOp { op, expr } => write!(f, "({}{})", op, expr),
             Expr::BinaryOp { left, op, right } => write!(f, "({} {} {})", left, op, right),
         }

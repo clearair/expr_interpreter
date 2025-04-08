@@ -1,4 +1,4 @@
-use std::{fmt::Display, ops::{Add, BitAnd, BitOr, Div, Mul, Sub}};
+use std::{fmt::Display, ops::{Add, Div, Mul, Sub}};
 
 // 求值器
 use crate::ast::{BinaryOp, Expr};
@@ -9,13 +9,63 @@ pub enum Value {
     Bool(bool),
 }
 
+impl Value {
+    fn and(&self, right: &Value) -> anyhow::Result<bool> {
+        match (self, right) {
+            (Value::Number(a), Value::Number(b)) => {
+                if *a > 0.0 && *b > 0.0 {
+                    return Ok(true);
+                }
+
+                Ok(false)
+            },
+            (Value::Number(a), Value::Bool(b)) => Ok(*a > 0.0 && *b),
+            (Value::Bool(a), Value::Bool(b)) => Ok(*a && *b),
+            (Value::Bool(a), Value::Number(b)) => Ok(*a && *b > 0.0),
+        }
+    }
+
+    fn or(&self, right: &Value) -> anyhow::Result<bool> {
+        match (self, right) {
+            (Value::Number(a), Value::Number(b)) => {
+                if *a > 0.0 || *b > 0.0 {
+                    return Ok(true);
+                }
+
+                Ok(false)
+            },
+            (Value::Number(a), Value::Bool(b)) => Ok(*a > 0.0 || *b),
+            (Value::Bool(a), Value::Bool(b)) => Ok(*a || *b),
+            (Value::Bool(a), Value::Number(b)) => Ok(*a || *b > 0.0),
+        }
+    }
+
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Number(n) => write!(f, "{}", n),
             Value::Bool(b) => write!(f, "{}", b),
         }
-        
+    }
+}
+
+impl From<Value> for f64 {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::Number(n) => n,
+            Value::Bool(b) => if b {1.0} else {0.0}
+        }
+    }
+}
+
+impl From<&Value> for f64 {
+    fn from(value: &Value) -> Self {
+        match value {
+            Value::Number(n) => *n,
+            Value::Bool(b) => if *b {1.0} else {0.0}
+        }
     }
 }
 
@@ -23,10 +73,7 @@ impl Add for Value {
     type Output = Value;
 
     fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a + b),
-            _ => panic!("非数字无法运算 + "),
-        }
+        Value::Number(f64::from(self) + f64::from(rhs))
     }
 }
 
@@ -34,10 +81,7 @@ impl Sub for Value {
     type Output = Value;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a - b),
-            _ => panic!("非数字无法运算 - "),
-        }
+        Value::Number(f64::from(self) - f64::from(rhs))
     }
 }
 
@@ -45,10 +89,7 @@ impl Mul for Value {
     type Output = Value;
 
     fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a * b),
-            _ => panic!("非数字无法运算 * "),
-        }
+        Value::Number(f64::from(self) * f64::from(rhs))
     }
 }
 
@@ -56,10 +97,7 @@ impl Div for Value {
     type Output = Value;
 
     fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Value::Number(a), Value::Number(b)) => Value::Number(a / b),
-            _ => panic!("非数字无法运算 / "),
-        }
+        Value::Number(f64::from(self) / f64::from(rhs))
     }
 }
 
@@ -75,12 +113,29 @@ pub fn eval(expr: &Expr) -> anyhow::Result<Value> {
                         if *op == BinaryOp::Sub {
                             n = Value::Number(-num);
                         }
+                        
                     }
-                    _ => anyhow::bail!("错误 bool 值无法数学运算"),
+                    Value::Bool(b) => {
+                        if *op == BinaryOp::Sub {
+                            n = Value::Bool(!b);
+                        }
+                    }
+                    // _ => anyhow::bail!("错误 bool 值无法数学运算"),
                 }
-                
+
                 Ok(n)
-            },
+            }
+            BinaryOp::Not => {
+                // let mut n = eval(expr)?;
+                match eval(expr)? {
+                    Value::Number(num) => {
+                        Ok(Value::Bool(num == 0.0))
+                    }
+                    Value::Bool(b) => {
+                        Ok(Value::Bool(!b))
+                    }
+                }
+            }
             _ => anyhow::bail!("不支持的单目运算符"),
         }
         Expr::BinaryOp { left, op, right } => {
@@ -92,7 +147,7 @@ pub fn eval(expr: &Expr) -> anyhow::Result<Value> {
                 BinaryOp::Sub => Ok(l - r),
                 BinaryOp::Mul => Ok(l * r),
                 BinaryOp::Div => {
-                    if r == Value::Number(0.0) {
+                    if r == Value::Number(0.0) || r == Value::Bool(false) {
                         anyhow::bail!("除以零错误");
                     }
                     Ok(l / r)
@@ -103,8 +158,8 @@ pub fn eval(expr: &Expr) -> anyhow::Result<Value> {
                 BinaryOp::Gte => Ok(if l >= r { Value::Bool(true) } else { Value::Bool(false)}),
                 BinaryOp::Lt  => Ok(if l <  r { Value::Bool(true) } else { Value::Bool(false)}),
                 BinaryOp::Lte => Ok(if l <= r { Value::Bool(true) } else { Value::Bool(false)}),
-                BinaryOp::And => Ok(if l && r {Value::Bool(true)} else {Value::Bool(false)}),
-                BinaryOp::Or => Ok(if l || r {Value::Bool(true)} else {Value::Bool(false)}),
+                BinaryOp::And => Ok(if l.and(&r)? {Value::Bool(true)} else {Value::Bool(false)}),
+                BinaryOp::Or => Ok(if l.or(&r)? {Value::Bool(true)} else {Value::Bool(false)}),
                 _ => anyhow::bail!("不支持的双目运算符"),
             }
         }

@@ -45,7 +45,7 @@ impl Parser {
         let mut node = self.parse_and()?;
         while let Some(token) = self.current()  {
             match token {
-                Token::Not => {
+                Token::Or => {
                     let op = BinaryOp::try_from(token)?; // 把 Token 转成 BinaryOp
                     self.eat();
                     let right = self.parse_and()?;
@@ -141,6 +141,8 @@ impl Parser {
 
     fn parse_unary(&mut self) -> anyhow::Result<Expr> {
         self.log_enter("parse_unary");
+        // let t = self.current();
+        // dbg!(t);
         let res = match self.current() {
             Some(Token::Minus) | Some(Token::Plus) => {
                 let op = if let Some(Token::Minus) = self.current() { BinaryOp::Sub } else { BinaryOp::Add };
@@ -150,6 +152,11 @@ impl Parser {
                     expr: Box::new(self.parse_primary()?),
                 })
             }
+            Some(Token::Not) => {                
+                Ok(Expr::UnaryOp {
+                    op: BinaryOp::Not, 
+                    expr: Box::new(self.parse_primary()?) })
+            }
             _ => self.parse_primary(),
         };
         self.log_exit("parse_unary");
@@ -158,12 +165,13 @@ impl Parser {
 
     fn parse_primary(&mut self) -> anyhow::Result<Expr> {
         self.log_enter("parse_primary");
-        let depth = self.depth;
+        // let depth = self.depth;
         let res = match self.eat() {
             Some(Token::Number(n)) => {
                 // println!("{:indent$}=> Number({})", "", n, indent = depth * 2);
                 Ok(Expr::Number(*n))
             }
+            
             Some(Token::LParen) => {
                 let expr = self.parse_expr()?;
                 if let Some(Token::RParen) = self.eat() {
