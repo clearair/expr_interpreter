@@ -103,6 +103,10 @@ impl Parser {
 
         while let Some(token) = self.current() {
             match token {
+                Token::Number(_) => {
+                    // 如果遇到数字后面紧跟数字，应该提示错误
+                    anyhow::bail!("缺少操作符，语法无效");
+                }
                 Token::Plus | Token::Minus => {
                     let op = if let Token::Plus = token { BinaryOp::Add } else { BinaryOp::Sub };
                     self.eat();
@@ -152,11 +156,11 @@ impl Parser {
                     expr: Box::new(self.parse_primary()?),
                 })
             }
-            Some(Token::Not) => {                
-                Ok(Expr::UnaryOp {
-                    op: BinaryOp::Not, 
-                    expr: Box::new(self.parse_primary()?) })
-            }
+            // Some(Token::Not) => {                
+            //     Ok(Expr::UnaryOp {
+            //         op: BinaryOp::Not, 
+            //         expr: Box::new(self.parse_primary()?) })
+            // }
             _ => self.parse_primary(),
         };
         self.log_exit("parse_unary");
@@ -168,10 +172,19 @@ impl Parser {
         // let depth = self.depth;
         let res = match self.eat() {
             Some(Token::Number(n)) => {
+                let n = *n;
                 // println!("{:indent$}=> Number({})", "", n, indent = depth * 2);
-                Ok(Expr::Number(*n))
+                match self.current() {
+                    Some(Token::Not) | Some(Token::LParen) | Some(Token::RParen) => anyhow::bail!("错误的语法1111"),
+                    _ => {},
+                }
+                Ok(Expr::Number(n))
             }
-            
+            Some(Token::Not) => {                
+                Ok(Expr::UnaryOp {
+                    op: BinaryOp::Not, 
+                    expr: Box::new(self.parse_expr()?) })
+            }
             Some(Token::LParen) => {
                 let expr = self.parse_expr()?;
                 if let Some(Token::RParen) = self.eat() {
